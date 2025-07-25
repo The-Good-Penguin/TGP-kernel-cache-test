@@ -1,0 +1,10 @@
+header:
+  version: 12
+  includes:
+    - kas/base.yml
+machine: genericx86-64
+local_conf_header:
+  10_base: |
+    hostname:pn-base-files = "qemutest"
+    IMAGE_FSTYPES:append = " wic.vmdk"
+    
