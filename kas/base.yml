@@ -7,8 +7,8 @@ repos:
   poky:
     path: layers/poky
     url: https://git.yoctoproject.org/git/poky
-    branch: kirkstone
-    commit: e139e9d0ce343ba77a09601a976c92acd562c9df
+    branch: scarthgap
+#    commit: e139e9d0ce343ba77a09601a976c92acd562c9df
     layers:
       meta:
       meta-poky:
@@ -17,8 +17,8 @@ repos:
   meta-openembedded:
     url: http://git.openembedded.org/meta-openembedded
     path: layers/meta-openembedded
-    branch: kirkstone
-    commit: 8e297cdc841c6cad34097f00a6903ba25edfc153
+    branch: scarthgap
+#    commit: 8e297cdc841c6cad34097f00a6903ba25edfc153
     layers:
       meta-oe:
       meta-networking:
