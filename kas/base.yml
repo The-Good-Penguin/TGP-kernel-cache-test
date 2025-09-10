@@ -35,3 +35,7 @@ local_conf_header:
     CORE_IMAGE_EXTRA_INSTALL:append = " efivar nano"
     INIT_MANAGER = "systemd"
     PREFERRED_PROVIDER_virtual/kernel = "linux-yocto-dev"
+    ENABLE_BINARY_LOCALE_GENERATION = "1"
+    GLIBC_GENERATE_LOCALES:append = " en_GB.UTF-8 en_US.UTF-8"
+    IMAGE_LINGUAS ?= "en-gb"
+
