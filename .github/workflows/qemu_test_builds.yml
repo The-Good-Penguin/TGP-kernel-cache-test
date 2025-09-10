@@ -1,0 +1,73 @@
+name: Build Artifacts
+
+on:
+  push:
+    branches:
+      - mkelly/new-bootcache
+  workflow_dispatch:
+
+jobs:
+  Build_Yocto:
+    strategy:
+      matrix:
+        config: [x86, arm64]
+        include:
+          - config: x86
+            kas_file: qemu
+            image: core-image-minimal
+            machine: qemux86-64
+          - config: arm64
+            kas_file: qemu-arm
+            image: core-image-minimal
+            machine: qemuarm64
+    runs-on: [tgp-aws]
+
+    env:
+      # Clean build (change to non-volatile for incremental build)
+      BUILD_DIR: ${{github.workspace}}/volatile
+      DL_DIR: /buildstate/yocto.downloads
+      SSTATE_DIR: /buildstate/yocto.sstate.ubuntu-22.04
+      REPO_NAME: ${{ github.event.repository.name }}
+
+    container:
+      image: thegoodpenguin/yocto:22.04
+      volumes:
+        - /media/buildstate:/buildstate
+
+    steps:
+      - name: Setup Build Environment
+        run: |
+            echo HOME=/home/ci | sudo tee -a $GITHUB_ENV
+            ln -sf /home/ci $GITHUB_WORKSPACE/volatile
+            sudo apt update && sudo apt install -yy libtinfo5 git
+            sudo chmod 777 /buildstate
+            mkdir -p ${DL_DIR} ${SSTATE_DIR}
+      - name: Setup Known Hosts
+        run: |
+            sudo apt install -yy jq curl
+            mkdir -p -m 0700 ~/.ssh
+            curl --silent https://api.github.com/meta  | jq --raw-output '"github.com "+.ssh_keys[]' >> ~/.ssh/known_hosts
+            chmod 600 ~/.ssh/known_hosts
+      - name: Checkout ${{env.REPO_NAME}}
+        uses: actions/checkout@v4
+        with:
+          path: ${{env.BUILD_DIR}}/${{env.REPO_NAME}}
+      - name: Update Kas
+        run: |
+          pip3 install kas --upgrade
+
+      - name: Build image
+        run: |
+          cd $BUILD_DIR/${{env.REPO_NAME}}
+          kas build ./kas/${{ matrix.kas_file }}.yml
+
+# If there is a build error, we get the logs..          
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-logs-${{ matrix.machine }}
+          path: |
+            ${{ env.REPO_DIR }}/build/tmp*/work*/**/temp/*.do_*.*
+
+
