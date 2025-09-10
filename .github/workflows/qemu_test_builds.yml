@@ -3,7 +3,7 @@ name: Build Artifacts
 on:
   push:
     branches:
-      - mkelly/new-bootcache
+      - master
   workflow_dispatch:
 
 jobs:
