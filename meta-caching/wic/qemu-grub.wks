@@ -1,0 +1,7 @@
+# This is an example of a simple wic file for grub
+# The boot partition is the EFI system partition
+# The rootfs partition is the main filesystem
+part --source bootimg-efi --sourceparams="loader=grub-efi" --ondisk vda --fstype=vfat --label=boot --active --align 1024
+part --source rootfs --ondisk vda --fstype=ext4 --label=root --align 1024
+
+bootloader --timeout=5 --append="root=/dev/vda2 rw" --ptable gpt

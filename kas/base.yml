@@ -32,4 +32,5 @@ local_conf_header:
   00_base: |
     CONF_VERSION = "2"
     EXTRA_IMAGE_FEATURES ?= "debug-tweaks"
-    CORE_IMAGE_EXTRA_INSTALL:append = " efivar"
+    CORE_IMAGE_EXTRA_INSTALL:append = " efivar nano"
+    INIT_MANAGER = "systemd"
