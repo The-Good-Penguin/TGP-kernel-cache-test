@@ -34,3 +34,4 @@ local_conf_header:
     EXTRA_IMAGE_FEATURES ?= "debug-tweaks"
     CORE_IMAGE_EXTRA_INSTALL:append = " efivar nano"
     INIT_MANAGER = "systemd"
+    PREFERRED_PROVIDER_virtual/kernel = "linux-yocto-dev"
