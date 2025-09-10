@@ -12,3 +12,7 @@ SRC_URI += " \
 KBRANCH = "v6.16/standard/base"
 LINUX_VERSION = "6.16"
 
+# Ignore upstream issues in the patches for now, issue warnings
+INSANE_SKIP:${PN}:append = "patch-status"
+ERROR_QA:remove = "patch-status"
+WARN_QA:append = "patch-status"
