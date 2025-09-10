@@ -5,7 +5,6 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/linux-yocto:"
 
 SRC_URI += " \
-    file://efi-bootcache-fragment.cfg \
     file://qemu-usage-fragment.cfg \
     "
 
