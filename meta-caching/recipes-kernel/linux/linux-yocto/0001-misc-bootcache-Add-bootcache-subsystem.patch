@@ -1,0 +1,81 @@
+From dfe62944dbcae7170c3bf49926a879dc77b54669 Mon Sep 17 00:00:00 2001
+From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
+Date: Fri, 29 Aug 2025 14:29:15 +0100
+Subject: [PATCH 1/7] misc: bootcache: Add bootcache subsystem
+
+This patch series introduces a new subsystem that provides a simple
+key-value cache for storing boot-time configuration data. The goal
+is to allow kernel components and drivers to cache time-consuming-to-compute
+values during boot, enabling faster subsequent boots by avoiding redundant
+initialization work.
+
+## Background
+
+During kernel boot, many subsystems perform expensive operations like:
+- Hardware detection and configuration
+- Performance tuning calculations
+- Resource allocation decisions
+- Driver initialization parameters
+
+These operations often produce the same results across boots on the same
+hardware, making them good candidates for caching.
+
+## Implementation
+
+The bootcache subsystem provides a simple API:
+- bootcache_get_u32() - retrieve cached values
+- bootcache_set_u32() - store values in cache
+- bootcache_writeout() - persist cache to storage (TODO)
+
+The current implementation uses an in-memory hash table with RCU-style
+locking for thread safety. The persistent storage backend is marked as
+a TODO item for future development.
+
+## Usage Example
+
+```c
+u32 cached_value;
+if (bootcache_get_u32("driver.expensive_calc", &cached_value) == 0) {
+    /* Use cached value */
+} else {
+    /* Compute value and cache it */
+    cached_value = expensive_computation();
+    bootcache_set_u32("driver.expensive_calc", cached_value);
+}
+
+# Describe the purpose of this series. The information you put here
+# will be used by the project maintainer to make a decision whether
+# your patches should be reviewed, and in what priority order. Please be
+# very detailed and link to any relevant discussions or sites that the
+# maintainer can review to better understand your proposed changes. If you
+# only have a single patch in your series, the contents of the cover
+# letter will be appended to the "under-the-cut" portion of the patch.
+
+# Lines starting with # will be removed from the cover letter. You can
+# use them to add notes or reminders to yourself. If you want to use
+# markdown headers in your cover letter, start the line with ">#".
+
+# You can add trailers to the cover letter. Any email addresses found in
+# these trailers will be added to the addresses specified/generated
+# during the b4 send stage. You can also run "b4 prep --auto-to-cc" to
+# auto-populate the To: and Cc: trailers based on the code being
+# modified.
+
+To: Arnd Bergmann <arnd@arndb.de>
+To: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Cc: linux-kernel@vger.kernel.org
+Signed-off-by: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
+
+
+--- b4-submit-tracking ---
+# This section is used internally by b4 prep for tracking purposes.
+{
+  "series": {
+    "revision": 1,
+    "change-id": "20250829-bootcache-b4db3d751a9a",
+    "prefixes": []
+  }
+}
+-- 
+2.43.0
+

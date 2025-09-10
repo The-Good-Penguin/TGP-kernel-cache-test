@@ -1,0 +1,112 @@
+From 8f3df6199e6c8b3499b427197b84ca3de6bd8323 Mon Sep 17 00:00:00 2001
+From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
+Date: Wed, 3 Sep 2025 13:24:34 +0100
+Subject: [PATCH 4/7] xadded sysfs writeout, moved file to base
+
+---
+ drivers/{misc => base}/bootcache.c | 28 ++++++++++++++++++++++------
+ include/linux/bootcache.h          |  8 --------
+ init/main.c                        |  2 +-
+ 3 files changed, 23 insertions(+), 15 deletions(-)
+ rename drivers/{misc => base}/bootcache.c (78%)
+
+diff --git a/drivers/misc/bootcache.c b/drivers/base/bootcache.c
+similarity index 78%
+rename from drivers/misc/bootcache.c
+rename to drivers/base/bootcache.c
+index 8b0a94b46edb..ae8e1a5075d5 100644
+--- a/drivers/misc/bootcache.c
++++ b/drivers/base/bootcache.c
+@@ -8,6 +8,8 @@
+ #include <linux/types.h>
+ #include <linux/spinlock.h>
+ #include <linux/errno.h>
++#include <linux/kobject.h>
++#include <linux/sysfs.h>
+ 
+ #include <linux/bootcache.h>
+ 
+@@ -15,6 +17,7 @@
+ 
+ static DEFINE_HASHTABLE(bootcache_table, BOOTCACHE_HASH_BITS);
+ static DEFINE_SPINLOCK(bootcache_lock);
++static struct kobject *bootcache_kobj;
+ 
+ struct bootcache_entry {
+ 	struct hlist_node node;
+@@ -92,23 +95,36 @@ int bootcache_set_u32(const char *name, u32 val)
+ 		kfree(new_entry);
+ 	}
+ 
+-	/* Write to persistent storage */
+-	if (ret == 0)
+-		bootcache_writeout();
+-
+ 	return ret;
+ }
+ EXPORT_SYMBOL(bootcache_set_u32);
+ 
+-void bootcache_writeout(void)
++static ssize_t writeout_store(struct kobject *kobj, struct kobj_attribute *attr,
++			     const char *buf, size_t count)
+ {
+ 	/* TODO: Implement persistent storage backend */
++	return count;
+ }
+-EXPORT_SYMBOL(bootcache_writeout);
++
++static struct kobj_attribute writeout_attr = __ATTR_WO(writeout);
+ 
+ static int __init bootcache_init(void)
+ {
++	int ret;
++
+ 	pr_info("bootcache: backend loaded\n");
++
++	/* Create /sys/kernel/bootcache/writeout */
++	bootcache_kobj = kobject_create_and_add("bootcache", kernel_kobj);
++	if (!bootcache_kobj)
++		return -ENOMEM;
++
++	ret = sysfs_create_file(bootcache_kobj, &writeout_attr.attr);
++	if (ret) {
++		kobject_put(bootcache_kobj);
++		return ret;
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/include/linux/bootcache.h b/include/linux/bootcache.h
+index d1da9ec6b6aa..5e8cde978aaf 100644
+--- a/include/linux/bootcache.h
++++ b/include/linux/bootcache.h
+@@ -22,12 +22,4 @@ int bootcache_get_u32(const char *name, u32 *out_val);
+  */
+ int bootcache_set_u32(const char *name, u32 val);
+ 
+-/**
+- * bootcache_writeout - Write cache contents to persistent storage
+- *
+- * Flushes any pending cache entries to persistent storage.
+- * Implementation depends on the active backend.
+- */
+-void bootcache_writeout(void);
+-
+ #endif /* _LINUX_BOOTCACHE_H */
+diff --git a/init/main.c b/init/main.c
+index 0ee0ee7b7c2c..30538810fc29 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -894,7 +894,7 @@ static void __init early_numa_node_init(void)
+ }
+ 
+ asmlinkage __visible __init __no_sanitize_address __noreturn __no_stack_protector
+-void start_kernel(void)
++void `(void)
+ {
+ 	char *command_line;
+ 	char *after_dashes;
+-- 
+2.43.0
+

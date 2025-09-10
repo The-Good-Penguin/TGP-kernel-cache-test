@@ -1,0 +1,106 @@
+From 0569f22d3c90597bd686005bdf8c740e563cfdfa Mon Sep 17 00:00:00 2001
+From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
+Date: Tue, 9 Sep 2025 10:30:29 +0100
+Subject: [PATCH 5/7] RAID4/5/6 cache strategy
+
+---
+ lib/raid6/algos.c | 74 ++++++++++++++++++++++++++++-------------------
+ 1 file changed, 44 insertions(+), 30 deletions(-)
+
+diff --git a/lib/raid6/algos.c b/lib/raid6/algos.c
+index 799e0e5eac26..157f63440b81 100644
+--- a/lib/raid6/algos.c
++++ b/lib/raid6/algos.c
+@@ -19,6 +19,7 @@
+ #include <linux/module.h>
+ #include <linux/gfp.h>
+ #endif
++#include <linux/bootcache.h>
+ 
+ struct raid6_calls raid6_call;
+ EXPORT_SYMBOL_GPL(raid6_call);
+@@ -159,38 +160,51 @@ static inline const struct raid6_calls *raid6_choose_gen(
+ 	int start = (disks>>1)-1, stop = disks-3;	/* work on the second half of the disks */
+ 	const struct raid6_calls *const *algo;
+ 	const struct raid6_calls *best;
+-
+-	for (bestgenperf = 0, best = NULL, algo = raid6_algos; *algo; algo++) {
+-		if (!best || (*algo)->priority >= best->priority) {
+-			if ((*algo)->valid && !(*algo)->valid())
+-				continue;
+-
+-			if (!IS_ENABLED(CONFIG_RAID6_PQ_BENCHMARK)) {
+-				best = *algo;
+-				break;
+-			}
+-
+-			perf = 0;
+-
+-			preempt_disable();
+-			j0 = jiffies;
+-			while ((j1 = jiffies) == j0)
+-				cpu_relax();
+-			while (time_before(jiffies,
+-					    j1 + (1<<RAID6_TIME_JIFFIES_LG2))) {
+-				(*algo)->gen_syndrome(disks, PAGE_SIZE, *dptrs);
+-				perf++;
+-			}
+-			preempt_enable();
+-
+-			if (perf > bestgenperf) {
+-				bestgenperf = perf;
+-				best = *algo;
++	u32 cached_algo_idx;
++
++	if (bootcache_get_u32("raid6_best_algo", &cached_algo_idx) == 0) {
++	    // Use cached algorithm, skip entire benchmark
++	    best = raid6_algos[cached_algo_idx];
++	    pr_info("raid6: using cached algorithm %s\n", best->name);
++	} else {
++		for (bestgenperf = 0, best = NULL, algo = raid6_algos; *algo; algo++) {
++			if (!best || (*algo)->priority >= best->priority) {
++				if ((*algo)->valid && !(*algo)->valid())
++					continue;
++
++				if (!IS_ENABLED(CONFIG_RAID6_PQ_BENCHMARK)) {
++					best = *algo;
++					break;
++				}
++
++				perf = 0;
++
++				preempt_disable();
++				j0 = jiffies;
++				while ((j1 = jiffies) == j0)
++					cpu_relax();
++				while (time_before(jiffies,
++						    j1 + (1<<RAID6_TIME_JIFFIES_LG2))) {
++					(*algo)->gen_syndrome(disks, PAGE_SIZE, *dptrs);
++					perf++;
++				}
++				preempt_enable();
++
++				if (perf > bestgenperf) {
++					bestgenperf = perf;
++					best = *algo;
++				}
++				pr_info("raid6: %-8s gen() %5ld MB/s\n", (*algo)->name,
++					(perf * HZ * (disks-2)) >>
++					(20 - PAGE_SHIFT + RAID6_TIME_JIFFIES_LG2));
+ 			}
+-			pr_info("raid6: %-8s gen() %5ld MB/s\n", (*algo)->name,
+-				(perf * HZ * (disks-2)) >>
+-				(20 - PAGE_SHIFT + RAID6_TIME_JIFFIES_LG2));
+ 		}
++		for (int i = 0; raid6_algos[i]; i++) {
++	        if (raid6_algos[i] == best) {
++	            bootcache_set_u32("raid6_best_algo", i);
++	            break;
++	        }
++    	}
+ 	}
+ 
+ 	if (!best) {
+-- 
+2.43.0
+

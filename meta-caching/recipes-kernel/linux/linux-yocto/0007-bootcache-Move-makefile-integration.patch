@@ -1,0 +1,38 @@
+From 29db8cfa12a5f7f1575ad191e92859c3f73da97e Mon Sep 17 00:00:00 2001
+From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
+Date: Wed, 10 Sep 2025 15:57:24 +0100
+Subject: [PATCH 7/7] bootcache: Move makefile integration
+
+Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
+---
+ drivers/base/Makefile | 1 +
+ drivers/misc/Makefile | 1 -
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/base/Makefile b/drivers/base/Makefile
+index 8074a10183dc..ef1784b1d6be 100644
+--- a/drivers/base/Makefile
++++ b/drivers/base/Makefile
+@@ -27,6 +27,7 @@ obj-$(CONFIG_GENERIC_MSI_IRQ) += platform-msi.o
+ obj-$(CONFIG_GENERIC_ARCH_TOPOLOGY) += arch_topology.o
+ obj-$(CONFIG_GENERIC_ARCH_NUMA) += arch_numa.o
+ obj-$(CONFIG_ACPI) += physical_location.o
++obj-$(CONFIG_BOOT_CACHE)    += bootcache.o
+ 
+ obj-y			+= test/
+ 
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index 0898766fc528..e2e66f5f4fb8 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -20,7 +20,6 @@ obj-$(CONFIG_RPMB)		+= rpmb-core.o
+ obj-$(CONFIG_QCOM_COINCELL)	+= qcom-coincell.o
+ obj-$(CONFIG_QCOM_FASTRPC)	+= fastrpc.o
+ obj-$(CONFIG_SENSORS_BH1770)	+= bh1770glc.o
+-obj-$(CONFIG_BOOT_CACHE)    += bootcache.o
+ obj-$(CONFIG_SENSORS_APDS990X)	+= apds990x.o
+ obj-$(CONFIG_ENCLOSURE_SERVICES) += enclosure.o
+ obj-$(CONFIG_KGDB_TESTS)	+= kgdbts.o
+-- 
+2.43.0
+
