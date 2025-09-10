@@ -1,0 +1,13 @@
+header:
+  version: 12
+  includes:
+    - kas/base.yml
+machine: qemuarm64
+local_conf_header:
+  10_base: |
+    hostname:pn-base-files = "qemutest"
+    IMAGE_FSTYPES:append = " wic.qcow2"
+  99_uboot: |
+    WKS_FILE = "qemu-uboot.wks"
+
+    

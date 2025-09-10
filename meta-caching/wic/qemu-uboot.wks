@@ -1,0 +1,18 @@
+# short-description: U-Boot image for QEMU arm64
+# long-description: Creates a partitioned image for QEMU ARM64 with U-Boot
+
+# Partition for U-Boot raw copy. This is a special, unformatted partition
+# where the bootloader is placed at a specific offset.
+part --source rawcopy --sourceparams="file=u-boot-qemuarm64.bin" --ondisk vda --no-table --align 128
+
+# The boot partition. This will hold the kernel image and device tree blob (dtb).
+# It's a FAT filesystem that U-Boot can read.
+part --source bootimg-partition --ondisk vda --fstype=vfat --label=boot --active --align 1024
+
+# The root filesystem partition.
+part --source rootfs --ondisk vda --fstype=ext4 --label rootfs --align 1024
+
+# The bootloader section of the wks file.
+# We don't need a specific bootloader command as U-Boot handles this
+# directly from the `boot` partition.
+
