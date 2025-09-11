@@ -1,7 +1,9 @@
 #
 # Common packages for both architectures
 #
-
+IMAGE_INSTALL:append = " \
+    kernel-module-bootcache-test \
+"
 #
 # Conditional packages and WIC file for x86-64
 #
