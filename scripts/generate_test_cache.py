@@ -37,7 +37,7 @@ def write_cache_file(filename, entries):
             for entry in entries:
                 key = entry['key'].encode('utf-8')
                 data_type = entry['data_type']
-                
+
                 # Based on the data type, pack the data into its binary representation.
                 # The data itself is already in little-endian format.
                 if data_type == DATA_TYPE_STRING:
@@ -94,7 +94,7 @@ def verify_file(filename):
                 key_length = struct.unpack('<I', f.read(4))[0]
                 data_length = struct.unpack('<I', f.read(4))[0]
                 data_type = struct.unpack('<B', f.read(1))[0]
-                
+
                 # Calculate the total payload size and read it.
                 payload_length = key_length + 1 + data_length
                 payload = f.read(payload_length)
@@ -121,7 +121,7 @@ def verify_file(filename):
                 elif data_type == DATA_TYPE_U8:
                     data = struct.unpack('<B', data_bytes)[0]
                     print(f"  Data (u8): {data}")
-                
+
                 print(f"  Data Length: {data_length}")
                 print("-" * 20)
 
@@ -141,11 +141,13 @@ if __name__ == "__main__":
         {'key': 'Bootcache Test Two', 'data': 5678, 'data_type': DATA_TYPE_U32},
         {'key': 'Bootcache Test Three', 'data': 9012, 'data_type': DATA_TYPE_U32},
         {'key': 'Bootcache Test Four', 'data': 0xDEADBEEF, 'data_type': DATA_TYPE_U32},
-        {'key': 'Bootcache Test Five', 'data': 0xC0DEBAD0, 'data_type': DATA_TYPE_U32}
+        {'key': 'Bootcache Test Five', 'data': 0xC0DEBAD0, 'data_type': DATA_TYPE_U32},
+        {'key': 'raid6_best_algo', 'data': 'neonx4', 'data_type': DATA_TYPE_STRING},
+        {'key': 'xor_blocks_fastest', 'data': '8regs', 'data_type': DATA_TYPE_STRING}
     ]
 
     output_file = "cache_output.bin"
-    
+
     # Run the writer function.
     write_cache_file(output_file, data_to_write)
 

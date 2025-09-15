@@ -1,0 +1,197 @@
+From 2e0aefa759e9b302e12b4b23b6380fd23544d1df Mon Sep 17 00:00:00 2001
+From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
+Date: Tue, 23 Sep 2025 15:13:06 +0100
+Subject: [PATCH 4/6] base: bootcache: Add bootcache test backend
+
+bootcache_backend_test provides a simple test backend of API
+demonstration and testing purposes.
+
+Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
+---
+ MAINTAINERS                           |   2 +
+ drivers/base/Kconfig                  |  14 +++
+ drivers/base/Makefile                 |   1 +
+ drivers/base/bootcache_backend_test.c | 119 ++++++++++++++++++++++++++
+ 4 files changed, 136 insertions(+)
+ create mode 100644 drivers/base/bootcache_backend_test.c
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 4bf3766b30bb..73679686d49a 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -4420,8 +4420,10 @@ F:	drivers/iio/imu/bmi323/
+ 
+ BOOT CACHE
+ M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
++M:	Marc Kelly <mkelly@thegoodpenguin.co.uk>
+ S:	Maintained
+ F:	drivers/base/bootcache.c
++F:	drivers/base/bootcache_*
+ F:	include/linux/bootcache.h
+ 
+ BPF JIT for ARC
+diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
+index da02f95948d8..1303364993ff 100644
+--- a/drivers/base/Kconfig
++++ b/drivers/base/Kconfig
+@@ -84,6 +84,20 @@ config BOOTCACHE
+ 
+ 	  If unsure, say N.
+ 
++	if BOOTCACHE
++	choice
++		prompt "Boot-time cache backend"
++		depends on BOOTCACHE
++
++	config BOOTCACHE_BACKEND_TEST
++		bool "Test backend"
++		help
++		  A simple backend for testing and development.
++		  It does not persist any data externally.
++
++	endchoice
++	endif
++
+ config STANDALONE
+ 	bool "Select only drivers that don't need compile-time external firmware"
+ 	default y
+diff --git a/drivers/base/Makefile b/drivers/base/Makefile
+index 10a16e6c2ea1..dc87c21cd794 100644
+--- a/drivers/base/Makefile
++++ b/drivers/base/Makefile
+@@ -9,6 +9,7 @@ obj-y			:= component.o core.o bus.o dd.o syscore.o \
+ 			   swnode.o faux.o
+ obj-$(CONFIG_AUXILIARY_BUS) += auxiliary.o
+ obj-$(CONFIG_BOOTCACHE)    += bootcache.o
++obj-$(CONFIG_BOOTCACHE_BACKEND_TEST)    += bootcache_backend_test.o
+ obj-$(CONFIG_DEVTMPFS)	+= devtmpfs.o
+ obj-y			+= power/
+ obj-$(CONFIG_ISA_BUS_API)	+= isa.o
+diff --git a/drivers/base/bootcache_backend_test.c b/drivers/base/bootcache_backend_test.c
+new file mode 100644
+index 000000000000..b44b4802fb99
+--- /dev/null
++++ b/drivers/base/bootcache_backend_test.c
+@@ -0,0 +1,119 @@
++// SPDX-License-Identifier: GPL-2.0
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include <linux/hashtable.h>
++#include <linux/string.h>
++#include <linux/types.h>
++#include <linux/errno.h>
++#include <linux/kobject.h>
++#include <linux/sysfs.h>
++
++#include <linux/bootcache.h>
++
++#define DRIVER_NAME "bootcache_test_backend"
++
++struct test_data {
++	const char *name;
++	u32 value;
++	size_t data_length;
++};
++
++static struct test_data test_data_array[] = {
++	{
++		.name = "Bootcache Test One",
++		.value = 1234,
++		.data_length = sizeof(u32),
++	},
++	{
++		.name = "Bootcache Test Two",
++		.value = 5678,
++		.data_length = sizeof(u32),
++	},
++	{
++		.name = "Bootcache Test Three",
++		.value = 9012,
++		.data_length = sizeof(u32),
++	},
++	{
++		.name = "Bootcache Test Four",
++		.value = 0xDEADBEEF,
++		.data_length = sizeof(u32),
++	},
++	{
++		.name = "Bootcache Test Five",
++		.value = 0xC0DEBAD0,
++		.data_length = sizeof(u32),
++	}
++};
++
++static int test_backend_load_cache(void)
++{
++
++	struct bootcache_entry *new_entry = NULL;
++	int i;
++	int ret;
++
++	pr_info("%s: Backend local_cache callback\n", DRIVER_NAME);
++
++	/*
++	 * We want to load a bunch of fake data into the cache here
++	 * so that it can be used for testing purposes
++	 */
++	for (i = 0; i < ARRAY_SIZE(test_data_array); i++) {
++		/*
++		 * Print the name and value of the current element.
++		 * Use pr_info for a standard kernel log message.
++		 */
++		new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
++		if (!new_entry)
++			return -ENOMEM;
++
++		new_entry->key = kstrdup(test_data_array[i].name, GFP_KERNEL);
++		if (!new_entry->key) {
++			kfree(new_entry);
++			return -ENOMEM;
++		}
++		new_entry->len = test_data_array[i].data_length;
++		new_entry->data = kmemdup(&test_data_array[i].value,
++			test_data_array[i].data_length, GFP_KERNEL);
++		if (!new_entry->data) {
++			kfree(new_entry->key);
++			kfree(new_entry);
++			return -ENOMEM;
++		}
++
++		/* call the framework provided function */
++		ret = bootcache_add_entry(new_entry);
++		if (ret) {
++			kfree(new_entry->key);
++			kfree(new_entry->data);
++			kfree(new_entry);
++			ret = 0;
++		}
++	}
++	return 0;
++}
++
++static struct bootcache_info cache_info = {
++	.name = "test",
++	.load_cache = test_backend_load_cache,
++};
++
++static int __init bootcache_backend_init(void)
++{
++	int ret;
++
++	ret = bootcache_register_backend(&cache_info);
++
++	if (ret < 0) {
++		pr_err("%s: bootcache_register_backend() failed with error %d\n",
++			DRIVER_NAME, ret);
++		return ret;
++	}
++	pr_info("%s: Backend loaded\n", DRIVER_NAME);
++
++	return 0;
++}
++
++core_initcall(bootcache_backend_init);
+-- 
+2.43.0
+

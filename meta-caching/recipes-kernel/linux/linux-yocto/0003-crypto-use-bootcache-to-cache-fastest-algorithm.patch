@@ -1,0 +1,97 @@
+From 9a68f3acdd1a8075f8b0cd0739c29208d9283204 Mon Sep 17 00:00:00 2001
+From: Andrew Murray <amurray@thegoodpenguin.co.uk>
+Date: Tue, 23 Sep 2025 15:13:05 +0100
+Subject: [PATCH 3/6] crypto: use bootcache to cache fastest algorithm
+
+During boot xor_blocks may determine the fastest xor algorithm
+by using do_xor_speed to perform a speed test on available
+algorithms. This process can increase the overall boot time.
+
+Let's make use of bootcache to cache the result of the speed
+test for subsequent boots.
+
+Signed-off-by: Andrew Murray <amurray@thegoodpenguin.co.uk>
+---
+ crypto/xor.c | 29 ++++++++++++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/crypto/xor.c b/crypto/xor.c
+index f39621a57bb3..3457df041406 100644
+--- a/crypto/xor.c
++++ b/crypto/xor.c
+@@ -14,6 +14,7 @@
+ #include <linux/raid/xor.h>
+ #include <linux/jiffies.h>
+ #include <linux/preempt.h>
++#include <linux/bootcache.h>
+ #include <asm/xor.h>
+ 
+ #ifndef XOR_SELECT_TEMPLATE
+@@ -54,13 +55,13 @@ EXPORT_SYMBOL(xor_blocks);
+ /* Set of all registered templates.  */
+ static struct xor_block_template *__initdata template_list;
+ 
+-#ifndef MODULE
+ static void __init do_xor_register(struct xor_block_template *tmpl)
+ {
+ 	tmpl->next = template_list;
+ 	template_list = tmpl;
+ }
+ 
++#ifndef MODULE
+ static int __init register_xor_blocks(void)
+ {
+ 	active_template = XOR_SELECT_TEMPLATE(NULL);
+@@ -79,6 +80,21 @@ static int __init register_xor_blocks(void)
+ #define BENCH_SIZE	4096
+ #define REPS		800U
+ 
++static struct xor_block_template * __init
++xor_get_template_by_name(char *fastest_name)
++{
++	struct xor_block_template *f;
++
++#define xor_speed	do_xor_register
++	// build a list of templates
++	XOR_TRY_TEMPLATES;
++#undef xor_speed
++	for (f = template_list; f; f = f->next)
++		if (!strcmp(f->name, fastest_name))
++			return f;
++	return NULL;
++}
++
+ static void __init
+ do_xor_speed(struct xor_block_template *tmpl, void *b1, void *b2)
+ {
+@@ -117,9 +133,18 @@ calibrate_xor_blocks(void)
+ {
+ 	void *b1, *b2;
+ 	struct xor_block_template *f, *fastest;
++	char cached_name[32];
++	int ret;
+ 
+ 	fastest = XOR_SELECT_TEMPLATE(NULL);
+ 
++	if (!fastest) {
++		ret = bootcache_get_string("xor_blocks_fastest",
++				cached_name, sizeof(cached_name));
++		if (!ret)
++			fastest = xor_get_template_by_name(cached_name);
++	}
++
+ 	if (fastest) {
+ 		printk(KERN_INFO "xor: automatically using best "
+ 				 "checksumming function   %-10s\n",
+@@ -149,6 +174,8 @@ calibrate_xor_blocks(void)
+ 		if (f->speed > fastest->speed)
+ 			fastest = f;
+ 
++	bootcache_set_string("xor_blocks_fastest", fastest->name);
++
+ 	pr_info("xor: using function: %s (%d MB/sec)\n",
+ 	       fastest->name, fastest->speed);
+ 
+-- 
+2.43.0
+

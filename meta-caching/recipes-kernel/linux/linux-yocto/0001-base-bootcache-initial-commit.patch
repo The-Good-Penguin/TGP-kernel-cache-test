@@ -1,0 +1,477 @@
+From 8af274ac4947d70ed49c0fbfdbf7598c1ebf19f6 Mon Sep 17 00:00:00 2001
+From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
+Date: Tue, 23 Sep 2025 15:13:03 +0100
+Subject: [PATCH 1/6] base: bootcache: initial commit
+
+bootcache provides boot-time key-value cache to help improve
+boot performance by allowing drivers to cache expensive computations.
+
+Simple API are provided:
+- bootcache_get_u16()/bootcache_set_u16() - retrieve/store u16 values
+- bootcache_get_u32()/bootcache_set_u32() - retrieve/store u32 values
+- bootcache_get_u64()/bootcache_set_u64() - retrieve/store u64 values
+- bootcache_get_string()/bootcache_set_string() - retrieve/store strings
+- bootcache_register_backend() - Backend registration
+- bootcache_add_entry() - Add cache entry into framework
+
+Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
+Signed-off-by: Andrea Campanella <acampanella@thegoodpenguin.co.uk>
+---
+ MAINTAINERS               |   6 ++
+ drivers/base/Kconfig      |  11 ++
+ drivers/base/Makefile     |   1 +
+ drivers/base/bootcache.c  | 178 +++++++++++++++++++++++++++++++++
+ include/linux/bootcache.h | 205 ++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 401 insertions(+)
+ create mode 100644 drivers/base/bootcache.c
+ create mode 100644 include/linux/bootcache.h
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index daf520a13bdf..4bf3766b30bb 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -4418,6 +4418,12 @@ S:	Maintained
+ F:	Documentation/devicetree/bindings/iio/imu/bosch,bmi323.yaml
+ F:	drivers/iio/imu/bmi323/
+ 
++BOOT CACHE
++M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
++S:	Maintained
++F:	drivers/base/bootcache.c
++F:	include/linux/bootcache.h
++
+ BPF JIT for ARC
+ M:	Shahab Vahedi <list+bpf@vahedi.org>
+ L:	bpf@vger.kernel.org
+diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
+index 064eb52ff7e2..da02f95948d8 100644
+--- a/drivers/base/Kconfig
++++ b/drivers/base/Kconfig
+@@ -73,6 +73,17 @@ config DEVTMPFS_SAFE
+ 	  with the PROT_EXEC flag. This can break, for example, non-KMS
+ 	  video drivers.
+ 
++config BOOTCACHE
++	bool "Boot-time cache for the kernel"
++	help
++	  Enable a simple key-value cache subsystem for storing boot-time
++	  configuration data. This allows drivers and kernel subsystems to
++	  cache expensive computations during boot, potentially improving
++	  boot performance on subsequent reboots by avoiding redundant
++	  hardware detection and initialization work
++
++	  If unsure, say N.
++
+ config STANDALONE
+ 	bool "Select only drivers that don't need compile-time external firmware"
+ 	default y
+diff --git a/drivers/base/Makefile b/drivers/base/Makefile
+index 8074a10183dc..10a16e6c2ea1 100644
+--- a/drivers/base/Makefile
++++ b/drivers/base/Makefile
+@@ -8,6 +8,7 @@ obj-y			:= component.o core.o bus.o dd.o syscore.o \
+ 			   topology.o container.o property.o cacheinfo.o \
+ 			   swnode.o faux.o
+ obj-$(CONFIG_AUXILIARY_BUS) += auxiliary.o
++obj-$(CONFIG_BOOTCACHE)    += bootcache.o
+ obj-$(CONFIG_DEVTMPFS)	+= devtmpfs.o
+ obj-y			+= power/
+ obj-$(CONFIG_ISA_BUS_API)	+= isa.o
+diff --git a/drivers/base/bootcache.c b/drivers/base/bootcache.c
+new file mode 100644
+index 000000000000..bdf7b569e53e
+--- /dev/null
++++ b/drivers/base/bootcache.c
+@@ -0,0 +1,178 @@
++// SPDX-License-Identifier: GPL-2.0
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include <linux/hashtable.h>
++#include <linux/string.h>
++#include <linux/stringhash.h>
++#include <linux/types.h>
++#include <linux/spinlock.h>
++#include <linux/errno.h>
++#include <linux/kobject.h>
++#include <linux/sysfs.h>
++#include <linux/bootcache.h>
++
++static DEFINE_HASHTABLE(bootcache_table, BOOTCACHE_HASH_BITS);
++static DEFINE_SPINLOCK(bootcache_lock);
++static struct kobject *bootcache_kobj;
++static struct bootcache_info *bootcache_backend;
++static bool bootcache_initilized;
++
++int bootcache_register_backend(struct bootcache_info *bci)
++{
++	int ret;
++
++	if (!bci)
++		return -EINVAL;
++	if (!bci->name)
++		return -EINVAL;
++
++	/* If we're not ready, tell backend to try again later */
++	if (!bootcache_initilized)
++		return -EPROBE_DEFER;
++
++	if (bootcache_backend) {
++		pr_warn("bootcache: Backend '%s' is already registered, cannot register '%s'\n",
++		bootcache_backend->name, bci->name);
++		return -EBUSY;
++	}
++	pr_info("bootcache: Registering backend '%s'\n",
++		bci->name);
++
++	/* Have the backend load and populate the cache store */
++	ret = bci->load_cache();
++
++	if (ret)
++		goto failed_initilize;
++
++	bootcache_backend = bci;
++	return 0;
++
++failed_initilize:
++	return ret;
++}
++EXPORT_SYMBOL(bootcache_register_backend);
++
++int bootcache_get(const char *name, void *buf, size_t *len)
++{
++	struct bootcache_entry *entry;
++	u32 hash;
++	int ret = -ENOENT;
++
++	if (!name || !buf || !len)
++		return -EINVAL;
++
++	hash = full_name_hash(NULL, name, strlen(name));
++
++	spin_lock(&bootcache_lock);
++	hash_for_each_possible(bootcache_table, entry, node, hash) {
++		if (strcmp(entry->key, name) == 0) {
++			if (*len < entry->len) {
++				*len = entry->len;
++				ret = -ENOSPC;
++				goto unlock;
++			}
++			memcpy(buf, entry->data, entry->len);
++			*len = entry->len;
++			ret = 0;
++			goto unlock;
++		}
++	}
++
++unlock:
++	spin_unlock(&bootcache_lock);
++	return ret;
++}
++EXPORT_SYMBOL(bootcache_get);
++
++int bootcache_add_entry(struct bootcache_entry *entry)
++{
++	u32 hash;
++	struct bootcache_entry *existing_entry;
++	int ret = 0;
++
++	hash = full_name_hash(NULL, entry->key, strlen(entry->key));
++
++	spin_lock(&bootcache_lock);
++
++	hash_for_each_possible(bootcache_table, existing_entry, node, hash) {
++		if (strcmp(existing_entry->key, entry->key) == 0) {
++			ret = -EEXIST;  // Key already exists
++			goto unlock;
++		}
++	}
++
++	hash_add(bootcache_table, &entry->node, hash);
++
++unlock:
++	spin_unlock(&bootcache_lock);
++	return ret;
++}
++EXPORT_SYMBOL(bootcache_add_entry);
++
++int bootcache_set(const char *name, const void *data, size_t len)
++{
++	struct bootcache_entry *new_entry;
++	int ret = 0;
++
++	if (!name || !data || !len)
++		return -EINVAL;
++
++	new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
++	if (!new_entry)
++		return -ENOMEM;
++
++	new_entry->key = kstrdup(name, GFP_KERNEL);
++	if (!new_entry->key) {
++		ret = -ENOMEM;
++		goto free;
++	}
++
++	new_entry->data = kmemdup(data, len, GFP_KERNEL);
++	if (!new_entry->data) {
++		ret = -ENOMEM;
++		goto free;
++	}
++
++	new_entry->len = len;
++	ret = bootcache_add_entry(new_entry);
++	if (!ret)
++		return 0;
++
++free:
++	kfree(new_entry->data);
++	kfree(new_entry->key);
++	kfree(new_entry);
++	return ret;
++}
++EXPORT_SYMBOL(bootcache_set);
++
++static ssize_t writeout_store(struct kobject *kobj, struct kobj_attribute *attr,
++			    const char *buf, size_t count)
++{
++	/*Implement persistent storage backend */
++	return count;
++}
++
++static struct kobj_attribute writeout_attr = __ATTR_WO(writeout);
++
++static int __init bootcache_init(void)
++{
++	int ret;
++
++	pr_info("bootcache: backend loaded\n");
++
++	/* Create /sys/kernel/bootcache/writeout */
++	bootcache_kobj = kobject_create_and_add("bootcache", kernel_kobj);
++	if (!bootcache_kobj)
++		return -ENOMEM;
++
++	ret = sysfs_create_file(bootcache_kobj, &writeout_attr.attr);
++	if (ret) {
++		kobject_put(bootcache_kobj);
++		return ret;
++	}
++	bootcache_initilized = true;
++	return 0;
++}
++core_initcall(bootcache_init);
+diff --git a/include/linux/bootcache.h b/include/linux/bootcache.h
+new file mode 100644
+index 000000000000..1f12c76a9fe2
+--- /dev/null
++++ b/include/linux/bootcache.h
+@@ -0,0 +1,205 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef _LINUX_BOOTCACHE_H
++#define _LINUX_BOOTCACHE_H
++
++#include <linux/types.h>
++
++#define BOOTCACHE_HASH_BITS 6  /* 64 buckets */
++
++struct bootcache_entry {
++	struct hlist_node node;
++	char *key;
++	void *data;
++	size_t len;
++};
++
++/**
++ * struct bootcache_info - Structure for registering a boot cache backend.
++ *
++ * @name:   The name of the backend.
++ *
++ * Callbacks:
++ * @load_cache: Callback function to read and populate the framework from the cache.
++ */
++
++struct bootcache_info {
++	const char *name;
++	/* Callback Function Pointers */
++	int (*load_cache)(void);
++};
++
++/**
++ * bootcache_add_entry - Add an entry directly into the hash table
++ * @entry: bootcache_entry structure
++ *
++ * Returns: 0 on success, entry was added, do not free it.
++ *          1 on success but an existing entry was updated,
++ *            free to deallocate entry.
++ */
++int bootcache_add_entry(struct bootcache_entry *entry);
++
++/**
++ * bootcache_register_backend - Register a backend provider with the framework
++ * @bci: bootcache_info structure
++ *
++ * Returns: 0 on success, -EPROBE_DEFER if the frontend is not ready,
++ *          -EBUSY if another backend is already registered,
++ *          -EINVAL on invalid registration information.
++ */
++int bootcache_register_backend(struct bootcache_info *bci);
++
++/**
++ * bootcache_get - Retrieve arbitrary data from the cache
++ * @name: Key to look up
++ * @buf: Buffer to store retrieved data
++ * @len: On input, size of buffer; on output, actual data size
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters,
++ *          -ENOENT if not found, -ENOSPC if buffer too small
++ */
++int bootcache_get(const char *name, void *buf, size_t *len);
++
++/**
++ * bootcache_set - Store arbitrary data in the cache
++ * @name: Key to store under
++ * @data: Data to store
++ * @len: Length of data
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOMEM on allocation failure
++ */
++int bootcache_set(const char *name, const void *data, size_t len);
++
++/**
++ * bootcache_get_u16 - Retrieve a u16 value from the cache
++ * @name: Key to look up
++ * @out_val: Pointer to store the retrieved value
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOENT if not found
++ */
++static inline int bootcache_get_u16(const char *name, u16 *out_val)
++{
++	size_t len = sizeof(u16);
++
++	if (IS_ENABLED(CONFIG_BOOTCACHE))
++		return bootcache_get(name, out_val, &len);
++	else
++		return -ENOENT;
++}
++
++/**
++ * bootcache_set_u16 - Store a u16 value in the cache
++ * @name: Key to store under
++ * @val: Value to store
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOMEM on allocation failure
++ */
++static inline int bootcache_set_u16(const char *name, u16 val)
++{
++	if (IS_ENABLED(CONFIG_BOOTCACHE))
++		return bootcache_set(name, &val, sizeof(u16));
++	else
++		return -EOPNOTSUPP;
++}
++
++/**
++ * bootcache_get_u32 - Retrieve a u32 value from the cache
++ * @name: Key to look up
++ * @out_val: Pointer to store the retrieved value
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOENT if not found
++ */
++static inline int bootcache_get_u32(const char *name, u32 *out_val)
++{
++	size_t len = sizeof(u32);
++
++	if (IS_ENABLED(CONFIG_BOOTCACHE))
++		return bootcache_get(name, out_val, &len);
++	else
++		return -ENOENT;
++}
++
++/**
++ * bootcache_set_u32 - Store a u32 value in the cache
++ * @name: Key to store under
++ * @val: Value to store
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOMEM on allocation failure
++ */
++static inline int bootcache_set_u32(const char *name, u32 val)
++{
++	if (IS_ENABLED(CONFIG_BOOTCACHE))
++		return bootcache_set(name, &val, sizeof(u32));
++	else
++		return -EOPNOTSUPP;
++}
++
++/**
++ * bootcache_get_u64 - Retrieve a u64 value from the cache
++ * @name: Key to look up
++ * @out_val: Pointer to store the retrieved value
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOENT if not found
++ */
++static inline int bootcache_get_u64(const char *name, u64 *out_val)
++{
++	size_t len = sizeof(u64);
++
++	if (IS_ENABLED(CONFIG_BOOTCACHE))
++		return bootcache_get(name, out_val, &len);
++	else
++		return -ENOENT;
++}
++
++/**
++ * bootcache_set_u64 - Store a u64 value in the cache
++ * @name: Key to store under
++ * @val: Value to store
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOMEM on allocation failure
++ */
++static inline int bootcache_set_u64(const char *name, u64 val)
++{
++	if (IS_ENABLED(CONFIG_BOOTCACHE))
++		return bootcache_set(name, &val, sizeof(u64));
++	else
++		return -EOPNOTSUPP;
++}
++
++/**
++ * bootcache_get_string - Retrieve a string from the cache
++ * @name: Key to look up
++ * @buf: Buffer to store retrieved string
++ * @buflen: Size of buffer
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters,
++ *          -ENOENT if not found, -ENOSPC if buffer too small
++ */
++static inline int bootcache_get_string(const char *name, char *buf, size_t buflen)
++{
++	size_t len = buflen;
++
++	if (IS_ENABLED(CONFIG_BOOTCACHE))
++		return bootcache_get(name, buf, &len);
++	else
++		return -ENOENT;
++}
++
++/**
++ * bootcache_set_string - Store a string in the cache
++ * @name: Key to store under
++ * @str: Null-terminated string to store
++ *
++ * Returns: 0 on success, -EINVAL for invalid parameters, -ENOMEM on allocation failure
++ */
++static inline int bootcache_set_string(const char *name, const char *str)
++{
++	if (IS_ENABLED(CONFIG_BOOTCACHE)) {
++		if (!str)
++			return -EINVAL;
++		return bootcache_set(name, str, strlen(str) + 1);
++	} else {
++		return -EOPNOTSUPP;
++	}
++}
++
++#endif /* _LINUX_BOOTCACHE_H */
+-- 
+2.43.0
+

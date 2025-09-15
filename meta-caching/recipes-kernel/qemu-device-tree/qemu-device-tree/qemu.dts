@@ -20,19 +20,24 @@
 		reg = <0x00 0x40000000 0x00 0x80000000>;
 		device_type = "memory";
 	};
-	
+
     reserved-memory {
         #address-cells = <2>;
         #size-cells = <2>;
         ranges;
 
-        bootcache: bootcache@BFFF0000 {
-            compatible = "kernel,bootcache";
+        bootcache_reserved: bootcache-reserved@BFFF0000 {
             no-map;
             reg = <0x00 0xBFFF0000 0x00 0x10000>;
+			label = "bootcache_backend_memory";
         };
     };
-    
+	bootcache-backend@BFFF0000 {
+		compatible = "linux,backend-backend-memory";
+		reg = <0x00 0xBFFF0000 0x00 0x10000>;
+		memory-region = <&bootcache_reserved>;
+	};
+
 	platform-bus@c000000 {
 		interrupt-parent = <0x8005>;
 		ranges = <0x00 0x00 0xc000000 0x2000000>;
