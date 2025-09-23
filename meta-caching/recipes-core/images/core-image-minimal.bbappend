@@ -19,8 +19,9 @@ IMAGE_INSTALL:append:qemuarm64 = " \
     u-boot-fw-utils \
     "
 
-IMAGE_BOOT_FILES:qemuarm64 += "Image qemu.dtb"
-WKS_FILE_DEPENDS:qemuarm64 += "virtual/kernel qemu-device-tree"
+IMAGE_BOOT_FILES:qemuarm64 += "Image qemu.dtb bootcache-test-data.bin"
+WKS_FILE_DEPENDS:qemuarm64 += "virtual/kernel qemu-device-tree bootcache-test-data"
 
 do_image_wic[depends] += "virtual/kernel:do_deploy"
 do_image_wic[depends] += "qemu-device-tree:do_deploy"
+do_image_wic[depends] += "bootcache-test-data:do_deploy"
