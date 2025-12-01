@@ -1,4 +1,4 @@
-From ddd088f37d00a36fb810c1aa3eda4d8891238806 Mon Sep 17 00:00:00 2001
+From 3db598e5d4278d0650b9c4797218fb349930ed9f Mon Sep 17 00:00:00 2001
 From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:04 +0100
 Subject: [PATCH 2/6] raid6: Add bootcache

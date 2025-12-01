@@ -1,4 +1,4 @@
-From 8af274ac4947d70ed49c0fbfdbf7598c1ebf19f6 Mon Sep 17 00:00:00 2001
+From bae26d1aa49b93eb31c2aaa3a924563f66425bf6 Mon Sep 17 00:00:00 2001
 From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:03 +0100
 Subject: [PATCH 1/6] base: bootcache: initial commit
@@ -20,17 +20,17 @@ Signed-off-by: Andrea Campanella <acampanella@thegoodpenguin.co.uk>
  MAINTAINERS               |   6 ++
  drivers/base/Kconfig      |  11 ++
  drivers/base/Makefile     |   1 +
- drivers/base/bootcache.c  | 178 +++++++++++++++++++++++++++++++++
- include/linux/bootcache.h | 205 ++++++++++++++++++++++++++++++++++++++
- 5 files changed, 401 insertions(+)
+ drivers/base/bootcache.c  | 221 ++++++++++++++++++++++++++++++++++++++
+ include/linux/bootcache.h | 206 +++++++++++++++++++++++++++++++++++
+ 5 files changed, 445 insertions(+)
  create mode 100644 drivers/base/bootcache.c
  create mode 100644 include/linux/bootcache.h
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index daf520a13bdf..4bf3766b30bb 100644
+index 97d958c945e4..7e2cd0f8a1f4 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -4418,6 +4418,12 @@ S:	Maintained
+@@ -4417,6 +4417,12 @@ S:	Maintained
  F:	Documentation/devicetree/bindings/iio/imu/bosch,bmi323.yaml
  F:	drivers/iio/imu/bmi323/
  
@@ -79,10 +79,10 @@ index 8074a10183dc..10a16e6c2ea1 100644
  obj-$(CONFIG_ISA_BUS_API)	+= isa.o
 diff --git a/drivers/base/bootcache.c b/drivers/base/bootcache.c
 new file mode 100644
-index 000000000000..bdf7b569e53e
+index 000000000000..89f199c3dd33
 --- /dev/null
 +++ b/drivers/base/bootcache.c
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,221 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/init.h>
 +#include <linux/kernel.h>
@@ -99,7 +99,7 @@ index 000000000000..bdf7b569e53e
 +
 +static DEFINE_HASHTABLE(bootcache_table, BOOTCACHE_HASH_BITS);
 +static DEFINE_SPINLOCK(bootcache_lock);
-+static struct kobject *bootcache_kobj;
++static struct kobject *bootcache_kobj, *storage_kobj;
 +static struct bootcache_info *bootcache_backend;
 +static bool bootcache_initilized;
 +
@@ -170,6 +170,19 @@ index 000000000000..bdf7b569e53e
 +}
 +EXPORT_SYMBOL(bootcache_get);
 +
++static ssize_t bootcache_entry_show(struct kobject *kobj, struct kobj_attribute *attr,
++	char *buf)
++{
++    struct bootcache_entry *entry = container_of(attr, struct bootcache_entry, attr);
++
++	if (entry->len > PAGE_SIZE) {
++        printk(KERN_ERR "Bootcache entry too large (%zu bytes) for single sysfs read.\n", entry->len);
++        return -E2BIG;
++    }
++    memcpy(buf, entry->data, entry->len);
++	return entry->len;
++}
++
 +int bootcache_add_entry(struct bootcache_entry *entry)
 +{
 +	u32 hash;
@@ -186,7 +199,14 @@ index 000000000000..bdf7b569e53e
 +			goto unlock;
 +		}
 +	}
++	/* Add a sysfs entry for the entry, with a read-only callback */
++	sysfs_attr_init(&entry->attr.attr);
++	entry->attr.attr.name = entry->key;
++	entry->attr.attr.mode = 0444;
++	entry->attr.show = bootcache_entry_show;
++	entry->attr.store = NULL;
 +
++	sysfs_create_file(storage_kobj, &entry->attr.attr);
 +	hash_add(bootcache_table, &entry->node, hash);
 +
 +unlock:
@@ -232,14 +252,25 @@ index 000000000000..bdf7b569e53e
 +}
 +EXPORT_SYMBOL(bootcache_set);
 +
-+static ssize_t writeout_store(struct kobject *kobj, struct kobj_attribute *attr,
-+			    const char *buf, size_t count)
++static ssize_t count_show(struct kobject *kobj, struct kobj_attribute *attr,
++	char *buf)
 +{
-+	/*Implement persistent storage backend */
-+	return count;
++    u32 bkt;
++    u32 count = 0;
++	struct bootcache_entry *entry;
++
++	/* Protect via getting the mutex */
++	spin_lock(&bootcache_lock);
++
++	hash_for_each(bootcache_table, bkt, entry, node) {
++        count++;
++    }
++
++	spin_unlock(&bootcache_lock);
++	return snprintf(buf, PAGE_SIZE, "%u\n", count);
 +}
 +
-+static struct kobj_attribute writeout_attr = __ATTR_WO(writeout);
++static struct kobj_attribute count_attr = __ATTR_RO(count);
 +
 +static int __init bootcache_init(void)
 +{
@@ -249,24 +280,36 @@ index 000000000000..bdf7b569e53e
 +
 +	/* Create /sys/kernel/bootcache/writeout */
 +	bootcache_kobj = kobject_create_and_add("bootcache", kernel_kobj);
-+	if (!bootcache_kobj)
-+		return -ENOMEM;
++	if (!bootcache_kobj) {
++		ret = -ENOMEM;
++		goto error;
++	}
 +
-+	ret = sysfs_create_file(bootcache_kobj, &writeout_attr.attr);
++	storage_kobj = kobject_create_and_add("storage", bootcache_kobj);
++	if (!storage_kobj) {
++		ret = -ENOMEM;
++		goto error;
++	}
++
++	ret = sysfs_create_file(bootcache_kobj, &count_attr.attr);
 +	if (ret) {
-+		kobject_put(bootcache_kobj);
-+		return ret;
++		goto error;
 +	}
 +	bootcache_initilized = true;
 +	return 0;
++
++error:
++	kobject_put(storage_kobj);
++	kobject_put(bootcache_kobj);
++	return ret;
 +}
 +core_initcall(bootcache_init);
 diff --git a/include/linux/bootcache.h b/include/linux/bootcache.h
 new file mode 100644
-index 000000000000..1f12c76a9fe2
+index 000000000000..1d6304150630
 --- /dev/null
 +++ b/include/linux/bootcache.h
-@@ -0,0 +1,205 @@
+@@ -0,0 +1,206 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +#ifndef _LINUX_BOOTCACHE_H
 +#define _LINUX_BOOTCACHE_H
@@ -277,6 +320,7 @@ index 000000000000..1f12c76a9fe2
 +
 +struct bootcache_entry {
 +	struct hlist_node node;
++	struct kobj_attribute attr;
 +	char *key;
 +	void *data;
 +	size_t len;

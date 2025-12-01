@@ -1,4 +1,4 @@
-From 2e0aefa759e9b302e12b4b23b6380fd23544d1df Mon Sep 17 00:00:00 2001
+From b4da8177f070050635f4210a392c297c1cb64c21 Mon Sep 17 00:00:00 2001
 From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:06 +0100
 Subject: [PATCH 4/6] base: bootcache: Add bootcache test backend
@@ -16,10 +16,10 @@ Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
  create mode 100644 drivers/base/bootcache_backend_test.c
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 4bf3766b30bb..73679686d49a 100644
+index 7e2cd0f8a1f4..7f6ef1ed5a55 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -4420,8 +4420,10 @@ F:	drivers/iio/imu/bmi323/
+@@ -4419,8 +4419,10 @@ F:	drivers/iio/imu/bmi323/
  
  BOOT CACHE
  M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>

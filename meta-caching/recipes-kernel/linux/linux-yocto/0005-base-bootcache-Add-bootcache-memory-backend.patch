@@ -1,4 +1,4 @@
-From 93cbcd4d61316598ce4519ec75c73a024b0a2228 Mon Sep 17 00:00:00 2001
+From b6fbaedd87a5b4635ec309d8470e561d55088d10 Mon Sep 17 00:00:00 2001
 From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:07 +0100
 Subject: [PATCH 5/6] base: bootcache: Add bootcache memory backend
@@ -11,8 +11,8 @@ Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 ---
  drivers/base/Kconfig                    |   7 +
  drivers/base/Makefile                   |   1 +
- drivers/base/bootcache_backend_memory.c | 218 ++++++++++++++++++++++++
- 3 files changed, 226 insertions(+)
+ drivers/base/bootcache_backend_memory.c | 260 ++++++++++++++++++++++++
+ 3 files changed, 268 insertions(+)
  create mode 100644 drivers/base/bootcache_backend_memory.c
 
 diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
@@ -47,13 +47,14 @@ index dc87c21cd794..d818e72df290 100644
  obj-$(CONFIG_ISA_BUS_API)	+= isa.o
 diff --git a/drivers/base/bootcache_backend_memory.c b/drivers/base/bootcache_backend_memory.c
 new file mode 100644
-index 000000000000..c93d4d8f27ea
+index 000000000000..1730a27c3c3d
 --- /dev/null
 +++ b/drivers/base/bootcache_backend_memory.c
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,260 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#define DEBUG 1
 +#include <linux/unaligned.h>
++#include <linux/crc32.h>
 +#include <linux/init.h>
 +#include <linux/io.h>
 +#include <linux/kernel.h>
@@ -90,6 +91,8 @@ index 000000000000..c93d4d8f27ea
 + */
 +struct cache_memory_store {
 +	u32 magic;
++	u32 total_length;
++	u32 crc32_checksum;
 +	u32 entry_count;
 +	struct cache_memory_store_entry entries[];
 +} __packed;
@@ -104,8 +107,12 @@ index 000000000000..c93d4d8f27ea
 +{
 +	const struct cache_memory_store *store;
 +	const u8 *current_ptr;
++	const u8 *entry_start_ptr;
 +	const void *max_address;
 +	u32 entry_count;
++	u32 total_length;
++	u32 stored_crc32;
++	u32 calculated_crc32;
 +	int i;
 +	int ret;
 +
@@ -119,7 +126,38 @@ index 000000000000..c93d4d8f27ea
 +		pr_warn("%s: Unable to map reserved memory 0x%llx\n", DRIVER_NAME, rmem->base);
 +		return -ENOMEM;
 +	}
-+	max_address = store + rmem->size;
++	max_address = (const u8 *)store + rmem->size;
++
++	if (get_unaligned(&store->magic) != BOOTCACHE_MAGIC) {
++		pr_err("%s: Invalid magic number: 0x%x (expected 0x%x)\n",
++			DRIVER_NAME, get_unaligned(&store->magic), BOOTCACHE_MAGIC);
++		ret = -EINVAL;
++		goto error;
++	}
++
++	total_length = get_unaligned(&store->total_length);
++	stored_crc32 = get_unaligned(&store->crc32_checksum);
++
++	if (total_length > (rmem->size - sizeof(store->magic) - sizeof(store->total_length))) {
++		pr_err("%s: Invalid total_length 0x%x. Exceeds available memory size.\n",
++			DRIVER_NAME, total_length);
++		ret = -EINVAL;
++		goto error;
++	}
++
++	entry_start_ptr = (const u8 *)&store->entry_count;
++
++	calculated_crc32 = crc32_le(~0, entry_start_ptr, total_length - sizeof(store->crc32_checksum));
++	calculated_crc32 ^= ~(u32)0;
++	if (calculated_crc32 != stored_crc32 ) {
++		pr_err("%s: CRC32 mismatch! Stored: 0x%x, Calculated: 0x%x. File corrupt.\n",
++			DRIVER_NAME, stored_crc32, calculated_crc32);
++		ret = -EIO;
++		goto error;
++	}
++	pr_debug("%s: Total Length and CRC32 checks PASSED.\n", DRIVER_NAME);
++
++	/* Checks have all passed, we now process the entries */
 +	current_ptr = (const unsigned char *)store->entries;
 +	entry_count = get_unaligned(&store->entry_count);
 +
@@ -130,6 +168,12 @@ index 000000000000..c93d4d8f27ea
 +		u8 *src, *dest;
 +		int j;
 +
++		if (((u8 *)current_ptr + sizeof(struct cache_memory_store_entry)) > (u8 *)max_address) {
++			pr_err("%s: Header boundary check failed before entry %d\n", DRIVER_NAME, i);
++			ret = -ENOMEM;
++			goto error;
++		}
++
 +		entry = (struct cache_memory_store_entry *)current_ptr;
 +		data_length = get_unaligned(&entry->data_length);
 +		key_length = get_unaligned(&entry->key_length);
@@ -137,6 +181,7 @@ index 000000000000..c93d4d8f27ea
 +		/* Check if will go outside the bounds */
 +		if (((u8 *)current_ptr + sizeof(struct cache_memory_store_entry) +
 +				data_length + key_length + 1) > (u8 *)max_address) {
++			pr_err("%s: Entry %d size check failed\n", DRIVER_NAME, i);
 +			ret = -ENOMEM;
 +			goto error;
 +		}
@@ -169,6 +214,8 @@ index 000000000000..c93d4d8f27ea
 +		for (j = 0; j < key_length; j++)
 +			*dest++ = get_unaligned(src++);
 +
++		*dest = '\0';
++
 +		src = &entry->data[key_length+1];
 +		dest = new_entry->data;
 +		for (j = 0; j < data_length; j++)
@@ -190,11 +237,6 @@ index 000000000000..c93d4d8f27ea
 +
 +		current_ptr += sizeof(struct cache_memory_store_entry) +
 +			data_length + key_length + 1;
-+		if ((u8 *)current_ptr + sizeof(struct cache_memory_store_entry)
-+				> (u8 *)max_address) {
-+			ret = -ENOMEM;
-+			goto error;
-+		}
 +	}
 +
 +error:
