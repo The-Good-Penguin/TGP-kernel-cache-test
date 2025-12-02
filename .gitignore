@@ -3,3 +3,4 @@ layers
 *~
 \#*\#
 /.vscode
+/scripts/*.bin
