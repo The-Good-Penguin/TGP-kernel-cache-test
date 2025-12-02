@@ -1,0 +1,14 @@
+[Unit]
+Description=Bootcache Gencache
+After=syslog.target local-fs.target
+ConditionPathExists=/sys/kernel/bootcache
+
+[Service]
+Type=simple
+RemainAfterExit=yes
+ExecStart=/usr/sbin/bootcache-wait-boot
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

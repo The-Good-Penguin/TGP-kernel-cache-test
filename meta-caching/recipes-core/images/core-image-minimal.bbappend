@@ -17,6 +17,7 @@ IMAGE_INSTALL:append:qemux86-64 = " \
 IMAGE_INSTALL:append:qemuarm64 = " \
     u-boot \
     u-boot-fw-utils \
+    bootcache-gencache \
     "
 
 IMAGE_BOOT_FILES:qemuarm64 += "Image qemu.dtb bootcache-test-data.bin"
