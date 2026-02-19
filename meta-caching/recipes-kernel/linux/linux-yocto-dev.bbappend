@@ -21,8 +21,8 @@ SRC_URI += " \
     "
 
 
-KBRANCH = "v6.17/standard/base"
-LINUX_VERSION = "6.17"
+KBRANCH = "v6.19/standard/base"
+LINUX_VERSION = "6.19"
 
 # Ignore upstream issues in the patches for now, issue warnings
 INSANE_SKIP:${PN}:append = "patch-status"
