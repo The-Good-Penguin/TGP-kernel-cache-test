@@ -8,7 +8,7 @@ repos:
     path: layers/poky
     url: https://git.yoctoproject.org/git/poky
     branch: scarthgap
-#    commit: e139e9d0ce343ba77a09601a976c92acd562c9df
+    commit: 72983ac391008ebceb45edc7a8f0f6d5f4fe715c
     layers:
       meta:
       meta-poky:
@@ -18,7 +18,7 @@ repos:
     url: http://git.openembedded.org/meta-openembedded
     path: layers/meta-openembedded
     branch: scarthgap
-#    commit: 8e297cdc841c6cad34097f00a6903ba25edfc153
+    commit: ec0469748be4159fb83fb0fa0148d786484c88cf
     layers:
       meta-oe:
       meta-networking:
