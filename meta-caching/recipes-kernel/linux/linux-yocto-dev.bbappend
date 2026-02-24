@@ -11,7 +11,8 @@ SRC_URI += " \
     file://0003-crypto-use-bootcache-to-cache-fastest-algorithm.patch \
     file://0004-base-bootcache-Add-bootcache-test-backend.patch \
     file://0005-base-bootcache-Add-bootcache-memory-backend.patch \
-    file://0006-dt-bindings-bootcache-Add-bindings-for-bootcache-bac.patch \
+    file://0006-base-bootcache-Add-kernel-command-line-backend.patch \
+    file://0007-dt-bindings-bootcache-Add-bindings-for-bootcache-bac.patch \
 "
 
 # Configs

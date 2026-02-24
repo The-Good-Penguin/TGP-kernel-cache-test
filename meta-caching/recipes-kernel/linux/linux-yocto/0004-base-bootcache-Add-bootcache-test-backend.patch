@@ -1,7 +1,7 @@
-From b4da8177f070050635f4210a392c297c1cb64c21 Mon Sep 17 00:00:00 2001
+From 81b312c6066b13d5f5260f654379aa44dfde57e3 Mon Sep 17 00:00:00 2001
 From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:06 +0100
-Subject: [PATCH 4/6] base: bootcache: Add bootcache test backend
+Subject: [PATCH 4/7] base: bootcache: Add bootcache test backend
 
 bootcache_backend_test provides a simple test backend of API
 demonstration and testing purposes.
@@ -16,10 +16,10 @@ Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
  create mode 100644 drivers/base/bootcache_backend_test.c
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 7e2cd0f8a1f4..7f6ef1ed5a55 100644
+index 1d281c850f03..c77136c25e1e 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -4419,8 +4419,10 @@ F:	drivers/iio/imu/bmi323/
+@@ -4594,8 +4594,10 @@ F:	drivers/iio/imu/bmi323/
  
  BOOT CACHE
  M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
@@ -31,7 +31,7 @@ index 7e2cd0f8a1f4..7f6ef1ed5a55 100644
  
  BPF JIT for ARC
 diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
-index da02f95948d8..1303364993ff 100644
+index 1d3e45b560ba..db3193c173b5 100644
 --- a/drivers/base/Kconfig
 +++ b/drivers/base/Kconfig
 @@ -84,6 +84,20 @@ config BOOTCACHE

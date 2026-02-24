@@ -1,7 +1,7 @@
-From bae26d1aa49b93eb31c2aaa3a924563f66425bf6 Mon Sep 17 00:00:00 2001
+From ea57db17194c0cd2f448d9db88f1cfa0f4cdf5cf Mon Sep 17 00:00:00 2001
 From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:03 +0100
-Subject: [PATCH 1/6] base: bootcache: initial commit
+Subject: [PATCH 1/7] base: bootcache: initial commit
 
 bootcache provides boot-time key-value cache to help improve
 boot performance by allowing drivers to cache expensive computations.
@@ -17,20 +17,43 @@ Simple API are provided:
 Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 Signed-off-by: Andrea Campanella <acampanella@thegoodpenguin.co.uk>
 ---
- MAINTAINERS               |   6 ++
- drivers/base/Kconfig      |  11 ++
- drivers/base/Makefile     |   1 +
- drivers/base/bootcache.c  | 221 ++++++++++++++++++++++++++++++++++++++
- include/linux/bootcache.h | 206 +++++++++++++++++++++++++++++++++++
- 5 files changed, 445 insertions(+)
+ .../admin-guide/kernel-parameters.txt         |   4 +
+ MAINTAINERS                                   |   6 +
+ drivers/base/Kconfig                          |  11 +
+ drivers/base/Makefile                         |   1 +
+ drivers/base/bootcache.c                      | 182 ++++++++++++++++
+ include/linux/bootcache.h                     | 205 ++++++++++++++++++
+ 6 files changed, 409 insertions(+)
  create mode 100644 drivers/base/bootcache.c
  create mode 100644 include/linux/bootcache.h
 
+diff --git a/Documentation/admin-guide/kernel-parameters.txt b/Documentation/admin-guide/kernel-parameters.txt
+index aa0031108bc1..62eb867caa58 100644
+--- a/Documentation/admin-guide/kernel-parameters.txt
++++ b/Documentation/admin-guide/kernel-parameters.txt
+@@ -7,6 +7,7 @@
+ 	ARM	ARM architecture is enabled.
+ 	ARM64	ARM64 architecture is enabled.
+ 	AX25	Appropriate AX.25 support is enabled.
++	BOOTCACHE Bootcaching infrastructure is enabled.
+ 	CLK	Common clock infrastructure is enabled.
+ 	CMA	Contiguous Memory Area support is enabled.
+ 	DRM	Direct Rendering Management support is enabled.
+@@ -654,6 +655,9 @@ Kernel parameters
+ 			embedded devices based on command line input.
+ 			See Documentation/block/cmdline-partition.rst
+ 
++    	bootcache.cache_disable= [BOOTCACHE]
++        		Disable fetching of cached data.
++
+ 	boot_delay=	[KNL,EARLY]
+ 			Milliseconds to delay each printk during boot.
+ 			Only works if CONFIG_BOOT_PRINTK_DELAY is enabled,
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 97d958c945e4..7e2cd0f8a1f4 100644
+index e08767323763..1d281c850f03 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -4417,6 +4417,12 @@ S:	Maintained
+@@ -4592,6 +4592,12 @@ S:	Maintained
  F:	Documentation/devicetree/bindings/iio/imu/bosch,bmi323.yaml
  F:	drivers/iio/imu/bmi323/
  
@@ -44,7 +67,7 @@ index 97d958c945e4..7e2cd0f8a1f4 100644
  M:	Shahab Vahedi <list+bpf@vahedi.org>
  L:	bpf@vger.kernel.org
 diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
-index 064eb52ff7e2..da02f95948d8 100644
+index 1786d87b29e2..1d3e45b560ba 100644
 --- a/drivers/base/Kconfig
 +++ b/drivers/base/Kconfig
 @@ -73,6 +73,17 @@ config DEVTMPFS_SAFE
@@ -79,15 +102,16 @@ index 8074a10183dc..10a16e6c2ea1 100644
  obj-$(CONFIG_ISA_BUS_API)	+= isa.o
 diff --git a/drivers/base/bootcache.c b/drivers/base/bootcache.c
 new file mode 100644
-index 000000000000..89f199c3dd33
+index 000000000000..ea7346babc56
 --- /dev/null
 +++ b/drivers/base/bootcache.c
-@@ -0,0 +1,221 @@
+@@ -0,0 +1,182 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/init.h>
 +#include <linux/kernel.h>
 +#include <linux/slab.h>
 +#include <linux/hashtable.h>
++#include <linux/moduleparam.h>
 +#include <linux/string.h>
 +#include <linux/stringhash.h>
 +#include <linux/types.h>
@@ -99,9 +123,12 @@ index 000000000000..89f199c3dd33
 +
 +static DEFINE_HASHTABLE(bootcache_table, BOOTCACHE_HASH_BITS);
 +static DEFINE_SPINLOCK(bootcache_lock);
-+static struct kobject *bootcache_kobj, *storage_kobj;
++static struct kobject *bootcache_kobj;
 +static struct bootcache_info *bootcache_backend;
 +static bool bootcache_initilized;
++
++static bool cache_disable = false;
++module_param(cache_disable, bool, 0444);
 +
 +int bootcache_register_backend(struct bootcache_info *bci)
 +{
@@ -144,7 +171,7 @@ index 000000000000..89f199c3dd33
 +	u32 hash;
 +	int ret = -ENOENT;
 +
-+	if (!name || !buf || !len)
++	if (!name || !buf || !len || cache_disable)
 +		return -EINVAL;
 +
 +	hash = full_name_hash(NULL, name, strlen(name));
@@ -170,19 +197,6 @@ index 000000000000..89f199c3dd33
 +}
 +EXPORT_SYMBOL(bootcache_get);
 +
-+static ssize_t bootcache_entry_show(struct kobject *kobj, struct kobj_attribute *attr,
-+	char *buf)
-+{
-+    struct bootcache_entry *entry = container_of(attr, struct bootcache_entry, attr);
-+
-+	if (entry->len > PAGE_SIZE) {
-+        printk(KERN_ERR "Bootcache entry too large (%zu bytes) for single sysfs read.\n", entry->len);
-+        return -E2BIG;
-+    }
-+    memcpy(buf, entry->data, entry->len);
-+	return entry->len;
-+}
-+
 +int bootcache_add_entry(struct bootcache_entry *entry)
 +{
 +	u32 hash;
@@ -199,14 +213,7 @@ index 000000000000..89f199c3dd33
 +			goto unlock;
 +		}
 +	}
-+	/* Add a sysfs entry for the entry, with a read-only callback */
-+	sysfs_attr_init(&entry->attr.attr);
-+	entry->attr.attr.name = entry->key;
-+	entry->attr.attr.mode = 0444;
-+	entry->attr.show = bootcache_entry_show;
-+	entry->attr.store = NULL;
 +
-+	sysfs_create_file(storage_kobj, &entry->attr.attr);
 +	hash_add(bootcache_table, &entry->node, hash);
 +
 +unlock:
@@ -252,25 +259,14 @@ index 000000000000..89f199c3dd33
 +}
 +EXPORT_SYMBOL(bootcache_set);
 +
-+static ssize_t count_show(struct kobject *kobj, struct kobj_attribute *attr,
-+	char *buf)
++static ssize_t writeout_store(struct kobject *kobj, struct kobj_attribute *attr,
++			    const char *buf, size_t count)
 +{
-+    u32 bkt;
-+    u32 count = 0;
-+	struct bootcache_entry *entry;
-+
-+	/* Protect via getting the mutex */
-+	spin_lock(&bootcache_lock);
-+
-+	hash_for_each(bootcache_table, bkt, entry, node) {
-+        count++;
-+    }
-+
-+	spin_unlock(&bootcache_lock);
-+	return snprintf(buf, PAGE_SIZE, "%u\n", count);
++	/*Implement persistent storage backend */
++	return count;
 +}
 +
-+static struct kobj_attribute count_attr = __ATTR_RO(count);
++static struct kobj_attribute writeout_attr = __ATTR_WO(writeout);
 +
 +static int __init bootcache_init(void)
 +{
@@ -280,36 +276,24 @@ index 000000000000..89f199c3dd33
 +
 +	/* Create /sys/kernel/bootcache/writeout */
 +	bootcache_kobj = kobject_create_and_add("bootcache", kernel_kobj);
-+	if (!bootcache_kobj) {
-+		ret = -ENOMEM;
-+		goto error;
-+	}
++	if (!bootcache_kobj)
++		return -ENOMEM;
 +
-+	storage_kobj = kobject_create_and_add("storage", bootcache_kobj);
-+	if (!storage_kobj) {
-+		ret = -ENOMEM;
-+		goto error;
-+	}
-+
-+	ret = sysfs_create_file(bootcache_kobj, &count_attr.attr);
++	ret = sysfs_create_file(bootcache_kobj, &writeout_attr.attr);
 +	if (ret) {
-+		goto error;
++		kobject_put(bootcache_kobj);
++		return ret;
 +	}
 +	bootcache_initilized = true;
 +	return 0;
-+
-+error:
-+	kobject_put(storage_kobj);
-+	kobject_put(bootcache_kobj);
-+	return ret;
 +}
 +core_initcall(bootcache_init);
 diff --git a/include/linux/bootcache.h b/include/linux/bootcache.h
 new file mode 100644
-index 000000000000..1d6304150630
+index 000000000000..1f12c76a9fe2
 --- /dev/null
 +++ b/include/linux/bootcache.h
-@@ -0,0 +1,206 @@
+@@ -0,0 +1,205 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +#ifndef _LINUX_BOOTCACHE_H
 +#define _LINUX_BOOTCACHE_H
@@ -320,7 +304,6 @@ index 000000000000..1d6304150630
 +
 +struct bootcache_entry {
 +	struct hlist_node node;
-+	struct kobj_attribute attr;
 +	char *key;
 +	void *data;
 +	size_t len;

@@ -21,7 +21,7 @@ index fb4adef281e..df5a44af5bf 100644
 +bootcache_addr_r=0xbfff0000
 +load_bootcache=virtio scan; if test -e virtio 0:1 ${bootcache_file}; then fatload virtio 0:1 ${bootcache_addr_r} ${bootcache_file}; fi
 +bootcache_file=bootcache-test-data.bin
-+virtioboot=virtio scan; fatload virtio 0:1 ${kernel_addr_r} Image; fatload virtio 0:1 ${fdt_addr} qemu.dtb; setenv bootargs "console=ttyAMA0 root=/dev/vda2 rw"; run load_bootcache; booti ${kernel_addr_r} - ${fdt_addr}
++virtioboot=virtio scan; fatload virtio 0:1 ${kernel_addr_r} Image; fatload virtio 0:1 ${fdt_addr} qemu.dtb; setenv bootargs "console=ttyAMA0 root=/dev/vda2 rw ${bootcache_string}"; run load_bootcache; booti ${kernel_addr_r} - ${fdt_addr}
 +bootcmd=run virtioboot
 -- 
 2.39.5

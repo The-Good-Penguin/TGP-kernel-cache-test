@@ -1,7 +1,7 @@
-From be1f6d28f8a463b251afa50f35bb1bcaa5d9444a Mon Sep 17 00:00:00 2001
+From ff1b3edabf030e44630d9099daec062063ec5707 Mon Sep 17 00:00:00 2001
 From: Andrew Murray <amurray@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:05 +0100
-Subject: [PATCH 3/6] crypto: use bootcache to cache fastest algorithm
+Subject: [PATCH 3/7] crypto: use bootcache to cache fastest algorithm
 
 During boot xor_blocks may determine the fastest xor algorithm
 by using do_xor_speed to perform a speed test on available

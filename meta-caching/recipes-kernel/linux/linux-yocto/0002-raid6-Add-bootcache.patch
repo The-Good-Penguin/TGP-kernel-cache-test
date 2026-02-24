@@ -1,7 +1,7 @@
-From 3db598e5d4278d0650b9c4797218fb349930ed9f Mon Sep 17 00:00:00 2001
+From 6039e87dc09b1defa65fb47a4fd61975f519d191 Mon Sep 17 00:00:00 2001
 From: acampanella-thegoodpenguin <acampanella@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:04 +0100
-Subject: [PATCH 2/6] raid6: Add bootcache
+Subject: [PATCH 2/7] raid6: Add bootcache
 
 Check for previously cached results before benchmark
 
