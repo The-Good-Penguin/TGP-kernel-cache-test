@@ -4,4 +4,4 @@
 part --source bootimg-efi --sourceparams="loader=grub-efi" --ondisk vda --fstype=vfat --label=boot --active --align 1024
 part --source rootfs --ondisk vda --fstype=ext4 --label=root --align 1024
 
-bootloader --timeout=5 --append="root=/dev/vda2 rw" --ptable gpt
+bootloader --timeout=5 --append="root=/dev/vda2 rw console=tty0 console=ttyS0,115200n8" --ptable gpt
