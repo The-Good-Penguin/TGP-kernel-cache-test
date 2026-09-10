@@ -1,4 +1,4 @@
-From 81b312c6066b13d5f5260f654379aa44dfde57e3 Mon Sep 17 00:00:00 2001
+From da85fe35e5d74c52679c4dda77705dba24d1a8ab Mon Sep 17 00:00:00 2001
 From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:06 +0100
 Subject: [PATCH 4/7] base: bootcache: Add bootcache test backend
@@ -16,10 +16,10 @@ Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
  create mode 100644 drivers/base/bootcache_backend_test.c
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 1d281c850f03..c77136c25e1e 100644
+index 9fceabcad4e5..141936d1a6c9 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -4594,8 +4594,10 @@ F:	drivers/iio/imu/bmi323/
+@@ -4682,8 +4682,10 @@ F:	drivers/iio/imu/bmi323/
  
  BOOT CACHE
  M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
@@ -31,10 +31,10 @@ index 1d281c850f03..c77136c25e1e 100644
  
  BPF JIT for ARC
 diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
-index 1d3e45b560ba..db3193c173b5 100644
+index 250eaa610897..a3a127fbda60 100644
 --- a/drivers/base/Kconfig
 +++ b/drivers/base/Kconfig
-@@ -84,6 +84,20 @@ config BOOTCACHE
+@@ -93,6 +93,20 @@ config BOOTCACHE
  
  	  If unsure, say N.
  

@@ -1,4 +1,4 @@
-From 31619f72ce27c405ff14347e485a885be2a4ae2c Mon Sep 17 00:00:00 2001
+From a4593085fb328f30cf016b0b63469c649df2c581 Mon Sep 17 00:00:00 2001
 From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:07 +0100
 Subject: [PATCH 5/7] base: bootcache: Add bootcache memory backend
@@ -16,10 +16,10 @@ Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
  create mode 100644 drivers/base/bootcache_backend_memory.c
 
 diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
-index db3193c173b5..e0ed5a3a4131 100644
+index a3a127fbda60..2e938500d57f 100644
 --- a/drivers/base/Kconfig
 +++ b/drivers/base/Kconfig
-@@ -95,6 +95,13 @@ config BOOTCACHE
+@@ -104,6 +104,13 @@ config BOOTCACHE
  		  A simple backend for testing and development.
  		  It does not persist any data externally.
  

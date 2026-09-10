@@ -1,6 +1,6 @@
-From 1c58d5b8e07344d3cf58de8ee8340b312fa9a372 Mon Sep 17 00:00:00 2001
+From c10a6004f3660db352572ec665413a6e93d17ff1 Mon Sep 17 00:00:00 2001
 From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
-Date: Tue, 24 Feb 2026 18:18:13 +0000
+Date: Fri, 26 Jun 2026 12:36:26 +0100
 Subject: [PATCH 6/7] base: bootcache: Add kernel command line backend
 
 Backend accepts data via the kernel commandline in the format of a
@@ -13,34 +13,41 @@ bootcache_backend_cmdline.cache_data="teststring=TestValue,testbinary_long=0xABA
 
 Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 ---
- .../admin-guide/kernel-parameters.txt         |   5 +
+ .../admin-guide/kernel-parameters.txt         |  12 ++
  drivers/base/Kconfig                          |   5 +
  drivers/base/Makefile                         |   1 +
  drivers/base/bootcache_backend_cmdline.c      | 176 ++++++++++++++++++
- 4 files changed, 187 insertions(+)
+ 4 files changed, 194 insertions(+)
  create mode 100644 drivers/base/bootcache_backend_cmdline.c
 
 diff --git a/Documentation/admin-guide/kernel-parameters.txt b/Documentation/admin-guide/kernel-parameters.txt
-index 62eb867caa58..42ec1f2d4ad3 100644
+index 584c1f627dbe..2b8aae0ce6fc 100644
 --- a/Documentation/admin-guide/kernel-parameters.txt
 +++ b/Documentation/admin-guide/kernel-parameters.txt
-@@ -658,6 +658,11 @@ Kernel parameters
-     	bootcache.cache_disable= [BOOTCACHE]
-         		Disable fetching of cached data.
+@@ -654,6 +654,18 @@ Kernel parameters
+ 			embedded devices based on command line input.
+ 			See Documentation/block/cmdline-partition.rst
  
-+	bootcache_backend_cmdline.cache_data= [BOOTCACHE]
-+			Supply cache data via commandline in the format of
-+			comma seperated	<key>=<value> pairs.
-+			Hex values prefixed with 0x are treated as arbitary raw data.
++	bootcache.cache_disable=
++			[BOOTCACHE] Disable fetching of cached data.
++
++	bootcache_backend_cmdline.cache_data=
++			[BOOTCACHE] Comma seperated entries of tag=value pairs
++			to be used as initial BootCache data. Accepts strings or
++			arbitary long byte arrays in hex format.
++			Example: 
++			bootcache_backend_cmdline.cache_data="teststring=TestValue"
++			or
++			bootcache_backend_cmdline.cache_data="testbinary=0x0102030405"
 +
  	boot_delay=	[KNL,EARLY]
  			Milliseconds to delay each printk during boot.
  			Only works if CONFIG_BOOT_PRINTK_DELAY is enabled,
 diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
-index e0ed5a3a4131..8871ce4a39b9 100644
+index 2e938500d57f..4973e875af3a 100644
 --- a/drivers/base/Kconfig
 +++ b/drivers/base/Kconfig
-@@ -101,6 +101,11 @@ config BOOTCACHE
+@@ -110,6 +110,11 @@ config BOOTCACHE
  		  A backend that reads the cache data from reserved system memory.
  		  The reserved memory block is defined in the device tree and is
  		  assumed to be populated by the bootloader.

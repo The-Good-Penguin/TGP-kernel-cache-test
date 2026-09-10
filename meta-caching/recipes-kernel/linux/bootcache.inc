@@ -1,10 +1,6 @@
-#
-# Use latest yocto dev git
-#
+FILESEXTRAPATHS:prepend := "${THISDIR}/bootcache/bootcache:"
 
-FILESEXTRAPATHS:prepend := "${THISDIR}/linux-yocto:"
-
-# Patches
+# Add all the bootcache patches
 SRC_URI += " \
     file://0001-base-bootcache-initial-commit.patch \
     file://0002-raid6-Add-bootcache.patch \
@@ -14,18 +10,3 @@ SRC_URI += " \
     file://0006-base-bootcache-Add-kernel-command-line-backend.patch \
     file://0007-dt-bindings-bootcache-Add-bindings-for-bootcache-bac.patch \
 "
-
-# Configs
-SRC_URI += " \
-    file://bootcache-fragment.cfg \
-    file://qemu-usage-fragment.cfg \
-    "
-
-
-KBRANCH = "v6.19/standard/base"
-LINUX_VERSION = "6.19"
-
-# Ignore upstream issues in the patches for now, issue warnings
-INSANE_SKIP:${PN}:append = "patch-status"
-ERROR_QA:remove = "patch-status"
-WARN_QA:append = "patch-status"

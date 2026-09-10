@@ -9,7 +9,7 @@
 # this is not accurate with respect to the licensing of the software being built (it
 # will not be in most cases) you must specify the correct value before using this
 # recipe for anything other than initial testing/development!
-SUMMARY = "Simple kernel module to test the efi-bootcache"
+SUMMARY = "Simple kernel module to test the bootcache"
 DESCRIPTION = "${SUMMARY}"
 LICENSE = "CLOSED"
 LIC_FILES_CHKSUM = ""

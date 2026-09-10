@@ -1,4 +1,4 @@
-From 98a0058d9a6d6e74a17523d427b3c0e918a8b3b6 Mon Sep 17 00:00:00 2001
+From 255e38e29dfcbf1af445bb522b7ca9f93312a1ac Mon Sep 17 00:00:00 2001
 From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
 Date: Tue, 23 Sep 2025 15:13:08 +0100
 Subject: [PATCH 7/7] dt-bindings: bootcache: Add bindings for bootcache
@@ -87,10 +87,10 @@ index 000000000000..cf46bf4c513e
 +        memory-region = <&bootcache_reserved>;
 +    };
 diff --git a/MAINTAINERS b/MAINTAINERS
-index c77136c25e1e..41012fba565c 100644
+index 141936d1a6c9..6a94f2593eb5 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -4596,6 +4596,7 @@ BOOT CACHE
+@@ -4684,6 +4684,7 @@ BOOT CACHE
  M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
  M:	Marc Kelly <mkelly@thegoodpenguin.co.uk>
  S:	Maintained

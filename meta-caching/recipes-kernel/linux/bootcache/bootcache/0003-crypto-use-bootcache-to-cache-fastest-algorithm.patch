@@ -1,0 +1,114 @@
+From 37af2d88551222f42780c2aefaa5eb8635b9aecc Mon Sep 17 00:00:00 2001
+From: Marc Kelly <mkelly@thegoodpenguin.co.uk>
+Date: Fri, 26 Jun 2026 12:27:55 +0100
+Subject: [PATCH 3/7] crypto: use bootcache to cache fastest algorithm
+
+During boot xor_blocks may determine the fastest xor algorithm
+by using do_xor_speed to perform a speed test on available
+algorithms. This process can increase the overall boot time.
+
+Let's make use of bootcache to cache the result of the speed
+test for subsequent boots.
+
+Signed-off-by: Andrew Murray <amurray@thegoodpenguin.co.uk>
+Signed-off-by: Marc Kelly <mkelly@thegoodpenguin.co.uk>
+---
+ lib/raid/xor/xor-core.c | 62 ++++++++++++++++++++++++++++++-----------
+ 1 file changed, 45 insertions(+), 17 deletions(-)
+
+diff --git a/lib/raid/xor/xor-core.c b/lib/raid/xor/xor-core.c
+index bd4e6e434418..6efc2113d2a0 100644
+--- a/lib/raid/xor/xor-core.c
++++ b/lib/raid/xor/xor-core.c
+@@ -12,6 +12,7 @@
+ #include <linux/jiffies.h>
+ #include <linux/preempt.h>
+ #include <linux/static_call.h>
++#include <linux/bootcache.h>
+ #include "xor_impl.h"
+ 
+ DEFINE_STATIC_CALL_NULL(xor_gen_impl, *xor_block_8regs.xor_gen);
+@@ -75,6 +76,17 @@ void __init xor_force(struct xor_block_template *tmpl)
+ #define BENCH_SIZE	4096
+ #define REPS		800U
+ 
++static struct xor_block_template *
++xor_get_template_by_name(char *fastest_name)
++{
++	struct xor_block_template *f;
++
++	for (f = template_list; f; f = f->next)
++		if (!strcmp(f->name, fastest_name))
++			return f;
++	return NULL;
++}
++
+ static void __init
+ do_xor_speed(struct xor_block_template *tmpl, void *b1, void *b2)
+ {
+@@ -110,29 +122,45 @@ static int __init calibrate_xor_blocks(void)
+ {
+ 	void *b1, *b2;
+ 	struct xor_block_template *f, *fastest;
++	char cached_name[32];
++	int ret;
+ 
+ 	if (forced_template)
+ 		return 0;
+ 
+-	b1 = (void *) __get_free_pages(GFP_KERNEL, 2);
+-	if (!b1) {
+-		pr_warn("xor: Yikes!  No memory available.\n");
+-		return -ENOMEM;
+-	}
+-	b2 = b1 + 2*PAGE_SIZE + BENCH_SIZE;
+-
+-	pr_info("xor: measuring software checksum speed\n");
+-	fastest = template_list;
+-	for (f = template_list; f; f = f->next) {
+-		do_xor_speed(f, b1, b2);
+-		if (f->speed > fastest->speed)
+-			fastest = f;
++	ret = bootcache_get_string("xor_blocks_fastest",
++			cached_name, sizeof(cached_name));
++	if (!ret)
++		fastest = xor_get_template_by_name(cached_name);
++
++	if (fastest) {
++		static_call_update(xor_gen_impl, fastest->xor_gen);
++		pr_info("xor: using function: %s (cached entry)\n",
++		       fastest->name);
++	} else {
++		b1 = (void *) __get_free_pages(GFP_KERNEL, 2);
++		if (!b1) {
++			pr_warn("xor: Yikes!  No memory available.\n");
++			return -ENOMEM;
++		}
++		b2 = b1 + 2*PAGE_SIZE + BENCH_SIZE;
++
++		pr_info("xor: measuring software checksum speed\n");
++		fastest = template_list;
++		for (f = template_list; f; f = f->next) {
++			do_xor_speed(f, b1, b2);
++			if (f->speed > fastest->speed)
++				fastest = f;
++		}
++	
++		bootcache_set_string("xor_blocks_fastest", fastest->name);
++
++		static_call_update(xor_gen_impl, fastest->xor_gen);
++		free_pages((unsigned long)b1, 2);
++		pr_info("xor: using function: %s (%d MB/sec)\n",
++		       fastest->name, fastest->speed);
+ 	}
+-	static_call_update(xor_gen_impl, fastest->xor_gen);
+-	pr_info("xor: using function: %s (%d MB/sec)\n",
+-	       fastest->name, fastest->speed);
+ 
+-	free_pages((unsigned long)b1, 2);
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

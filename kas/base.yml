@@ -7,8 +7,7 @@ repos:
   poky:
     path: layers/poky
     url: https://git.yoctoproject.org/git/poky
-    branch: scarthgap
-    commit: 72983ac391008ebceb45edc7a8f0f6d5f4fe715c
+    tag: yocto-5.0.18
     layers:
       meta:
       meta-poky:
@@ -18,12 +17,17 @@ repos:
     url: http://git.openembedded.org/meta-openembedded
     path: layers/meta-openembedded
     branch: scarthgap
-    commit: ec0469748be4159fb83fb0fa0148d786484c88cf
+    commit: b0c2c648a1af89e7a8dd4c2ec841f3bc0ed0ccb9
     layers:
       meta-oe:
       meta-networking:
       meta-python:
       meta-perl:
+
+  meta-linux-mainline:
+    url: https://github.com/betafive/meta-linux-mainline
+    path: layers/meta-linux-mainline
+    branch: scarthgap
 
   meta-caching:
     path: meta-caching
@@ -34,8 +38,9 @@ local_conf_header:
     EXTRA_IMAGE_FEATURES ?= "debug-tweaks"
     CORE_IMAGE_EXTRA_INSTALL:append = " efivar nano"
     INIT_MANAGER = "systemd"
-    PREFERRED_PROVIDER_virtual/kernel = "linux-mainline"
     ENABLE_BINARY_LOCALE_GENERATION = "1"
     GLIBC_GENERATE_LOCALES:append = " en_GB.UTF-8 en_US.UTF-8"
     IMAGE_LINGUAS ?= "en-gb"
-
+  01_kernel: |
+    require conf/linux-mainline/stable.inc
+    PREFERRED_VERSION_linux-stable = "7.1%"
